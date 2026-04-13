@@ -62,9 +62,17 @@ export const verifyPasswordSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 });
 
+export const createWebhookSchema = z.object({
+  url: z.string().url('Invalid webhook URL'),
+  events: z
+    .array(z.enum(['link.clicked', 'link.created', 'link.threshold_reached', 'link.expired']))
+    .min(1, 'At least one event is required'),
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type CreateLinkInput = z.infer<typeof createLinkSchema>;
 export type UpdateLinkInput = z.infer<typeof updateLinkSchema>;
 export type BulkCreateLinksInput = z.infer<typeof bulkCreateLinksSchema>;
 export type PaginationInput = z.infer<typeof paginationSchema>;
+export type CreateWebhookInput = z.infer<typeof createWebhookSchema>;

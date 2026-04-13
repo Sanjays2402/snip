@@ -14,4 +14,5 @@ export const config = {
   },
   baseUrl: process.env.BASE_URL || 'http://localhost:3000',
   shortCodeLength: parseInt(process.env.SHORT_CODE_LENGTH || '7', 10),
+  clickhouseUrl: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
 } as const;

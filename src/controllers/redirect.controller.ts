@@ -1,8 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
-import { linkService } from '../services/index.js';
-import { clickService } from '../services/index.js';
-import { isBot } from '../utils/helpers.js';
+import UAParser from 'ua-parser-js';
+import { linkService, clickService, webhookService } from '../services/index.js';
+import { isBot, hashIp } from '../utils/helpers.js';
 import { AppError } from '../utils/errors.js';
+import { geoLookupQueue, webhookDeliveryQueue } from '../jobs/queues.js';
 
 export async function redirect(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -35,19 +36,48 @@ export async function redirect(req: Request, res: Response, next: NextFunction):
 
     // Record click async (don't block redirect)
     const userAgent = req.get('user-agent') || '';
-    if (!isBot(userAgent)) {
-      // Fire and forget
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+    const botDetected = isBot(userAgent);
+
+    if (!botDetected) {
+      const parser = new UAParser(userAgent);
+      const browser = parser.getBrowser();
+      const os = parser.getOS();
+      const device = parser.getDevice();
+
+      // Record to Postgres (fallback)
       clickService
         .recordClick({
           linkId: link.id,
-          ip: req.ip || req.socket.remoteAddress || 'unknown',
+          ip,
           userAgent,
           referrer: req.get('referrer'),
         })
-        .catch((err) => console.error('[Click] Failed to record:', err));
+        .catch((err) => console.error('[Click] Failed to record to PG:', err));
 
       // Increment count async
       linkService.incrementClickCount(link.id).catch((err) => console.error('[Click] Failed to increment:', err));
+
+      // Enqueue geo-lookup + ClickHouse write job
+      geoLookupQueue
+        .add('geo-lookup', {
+          clickLinkId: link.id,
+          shortCode,
+          ip,
+          ipHash: hashIp(ip),
+          userAgent,
+          device: device.type || 'desktop',
+          browser: browser.name || 'unknown',
+          os: os.name || 'unknown',
+          referrer: req.get('referrer') || '',
+          isBot: false,
+        })
+        .catch((err) => console.error('[Click] Failed to enqueue geo-lookup:', err));
+
+      // Fire webhooks for link.clicked event
+      fireWebhooksForClick(link.id, shortCode).catch((err) =>
+        console.error('[Webhook] Failed to fire:', err),
+      );
     }
 
     // Redirect
@@ -74,7 +104,6 @@ export async function verifyPassword(
     }
 
     if (!link.passwordHash) {
-      // Not password protected, just redirect
       const statusCode = link.isPermanent ? 301 : 302;
       res.redirect(statusCode, link.url);
       return;
@@ -97,22 +126,97 @@ export async function verifyPassword(
 
     // Record click
     const userAgent = req.get('user-agent') || '';
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+
     if (!isBot(userAgent)) {
+      const parser = new UAParser(userAgent);
+      const browser = parser.getBrowser();
+      const os = parser.getOS();
+      const device = parser.getDevice();
+
       clickService
         .recordClick({
           linkId: link.id,
-          ip: req.ip || req.socket.remoteAddress || 'unknown',
+          ip,
           userAgent,
           referrer: req.get('referrer'),
         })
         .catch((err) => console.error('[Click] Failed to record:', err));
 
       linkService.incrementClickCount(link.id).catch((err) => console.error('[Click] Failed to increment:', err));
+
+      geoLookupQueue
+        .add('geo-lookup', {
+          clickLinkId: link.id,
+          shortCode,
+          ip,
+          ipHash: hashIp(ip),
+          userAgent,
+          device: device.type || 'desktop',
+          browser: browser.name || 'unknown',
+          os: os.name || 'unknown',
+          referrer: req.get('referrer') || '',
+          isBot: false,
+        })
+        .catch((err) => console.error('[Click] Failed to enqueue geo-lookup:', err));
+
+      fireWebhooksForClick(link.id, shortCode).catch((err) =>
+        console.error('[Webhook] Failed to fire:', err),
+      );
     }
 
     const statusCode = link.isPermanent ? 301 : 302;
     res.redirect(statusCode, link.url);
   } catch (err) {
     next(err);
+  }
+}
+
+async function fireWebhooksForClick(linkId: string, shortCode: string): Promise<void> {
+  // We need the link's userId to find webhooks. Grab from DB.
+  const { db } = await import('../config/database.js');
+  const { links } = await import('../models/schema.js');
+  const { eq } = await import('drizzle-orm');
+
+  const link = await db.query.links.findFirst({
+    where: eq(links.id, linkId),
+    columns: { userId: true },
+  });
+
+  if (!link) return;
+
+  const webhooks = await webhookService.getWebhooksForEvent(link.userId, 'link.clicked');
+
+  for (const webhook of webhooks) {
+    const payload = {
+      event: 'link.clicked',
+      timestamp: new Date().toISOString(),
+      data: { linkId, shortCode },
+    };
+
+    const delivery = await webhookService.createDelivery(
+      webhook.id,
+      'link.clicked',
+      payload,
+    );
+
+    await webhookDeliveryQueue.add(
+      'webhook-delivery',
+      {
+        deliveryId: delivery.id,
+        webhookId: webhook.id,
+        url: webhook.url,
+        secret: webhook.secret,
+        event: 'link.clicked',
+        payload: JSON.stringify(payload),
+      },
+      {
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 5000,
+        },
+      },
+    );
   }
 }

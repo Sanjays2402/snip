@@ -30,6 +30,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   links: many(links),
   ownedWorkspaces: many(workspaces),
   workspaceMemberships: many(workspaceMembers),
+  webhooks: many(webhooks),
 }));
 
 // API Keys
@@ -173,6 +174,76 @@ export const workspaceMembersRelations = relations(workspaceMembers, ({ one }) =
   user: one(users, {
     fields: [workspaceMembers.userId],
     references: [users.id],
+  }),
+}));
+
+// Webhook events enum
+export const webhookEventEnum = pgEnum('webhook_event', [
+  'link.clicked',
+  'link.created',
+  'link.threshold_reached',
+  'link.expired',
+]);
+
+// Webhook delivery status enum
+export const webhookDeliveryStatusEnum = pgEnum('webhook_delivery_status', [
+  'pending',
+  'success',
+  'failed',
+]);
+
+// Webhooks
+export const webhooks = pgTable(
+  'webhooks',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    url: text('url').notNull(),
+    secret: text('secret').notNull(),
+    events: text('events').array().notNull().default([]),
+    isActive: boolean('is_active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index('webhooks_user_id_idx').on(table.userId)],
+);
+
+export const webhooksRelations = relations(webhooks, ({ one, many }) => ({
+  user: one(users, {
+    fields: [webhooks.userId],
+    references: [users.id],
+  }),
+  deliveries: many(webhookDeliveries),
+}));
+
+// Webhook Deliveries
+export const webhookDeliveries = pgTable(
+  'webhook_deliveries',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    webhookId: uuid('webhook_id')
+      .notNull()
+      .references(() => webhooks.id, { onDelete: 'cascade' }),
+    event: text('event').notNull(),
+    payload: text('payload').notNull(),
+    status: webhookDeliveryStatusEnum('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    lastAttemptAt: timestamp('last_attempt_at', { withTimezone: true }),
+    responseStatus: integer('response_status'),
+    responseBody: text('response_body'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('webhook_deliveries_webhook_id_idx').on(table.webhookId),
+    index('webhook_deliveries_status_idx').on(table.status),
+  ],
+);
+
+export const webhookDeliveriesRelations = relations(webhookDeliveries, ({ one }) => ({
+  webhook: one(webhooks, {
+    fields: [webhookDeliveries.webhookId],
+    references: [webhooks.id],
   }),
 }));
 

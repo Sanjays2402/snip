@@ -8,6 +8,7 @@ services:
       PORT: '3000'
       DATABASE_URL: postgresql://snip:snip_secret@postgres:5432/snip
       REDIS_URL: redis://redis:6379
+      CLICKHOUSE_URL: http://clickhouse:8123
       JWT_SECRET: change-me-in-production-min-32-chars!!
       JWT_REFRESH_SECRET: change-me-in-production-refresh-32!!
       JWT_EXPIRES_IN: 15m
@@ -18,6 +19,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      clickhouse:
         condition: service_healthy
     restart: unless-stopped
 
@@ -52,6 +55,24 @@ services:
     command: redis-server --appendonly yes
     restart: unless-stopped
 
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    ports:
+      - '8123:8123'
+      - '9000:9000'
+    volumes:
+      - clickhousedata:/var/lib/clickhouse
+    environment:
+      CLICKHOUSE_DB: snip
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: '1'
+    healthcheck:
+      test: ['CMD', 'clickhouse-client', '--query', 'SELECT 1']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
 volumes:
   pgdata:
   redisdata:
+  clickhousedata:
