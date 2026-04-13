@@ -69,6 +69,49 @@ export const createWebhookSchema = z.object({
     .min(1, 'At least one event is required'),
 });
 
+// QR code query params
+export const qrQuerySchema = z.object({
+  size: z.coerce.number().int().min(100).max(2000).default(300),
+  format: z.enum(['png', 'svg']).default('png'),
+  fg_color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Invalid hex color').default('#000000'),
+  bg_color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Invalid hex color').default('#ffffff'),
+  logo_url: z.string().url().optional(),
+});
+
+// Workspace schemas
+export const createWorkspaceSchema = z.object({
+  name: z.string().min(1).max(255),
+  slug: z
+    .string()
+    .min(2)
+    .max(255)
+    .regex(/^[a-z0-9_-]+$/, 'Slug must be lowercase alphanumeric with hyphens/underscores'),
+});
+
+export const updateWorkspaceSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  slug: z
+    .string()
+    .min(2)
+    .max(255)
+    .regex(/^[a-z0-9_-]+$/, 'Slug must be lowercase alphanumeric with hyphens/underscores')
+    .optional(),
+});
+
+export const inviteMemberSchema = z.object({
+  email: z.string().email('Invalid email'),
+  role: z.enum(['admin', 'editor', 'viewer']),
+});
+
+export const updateMemberRoleSchema = z.object({
+  role: z.enum(['admin', 'editor', 'viewer']),
+});
+
+export const transferOwnershipSchema = z.object({
+  newOwnerId: z.string().uuid('Invalid user ID'),
+});
+
+// Type exports
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type CreateLinkInput = z.infer<typeof createLinkSchema>;
@@ -76,3 +119,9 @@ export type UpdateLinkInput = z.infer<typeof updateLinkSchema>;
 export type BulkCreateLinksInput = z.infer<typeof bulkCreateLinksSchema>;
 export type PaginationInput = z.infer<typeof paginationSchema>;
 export type CreateWebhookInput = z.infer<typeof createWebhookSchema>;
+export type QRQueryInput = z.infer<typeof qrQuerySchema>;
+export type CreateWorkspaceInput = z.infer<typeof createWorkspaceSchema>;
+export type UpdateWorkspaceInput = z.infer<typeof updateWorkspaceSchema>;
+export type InviteMemberInput = z.infer<typeof inviteMemberSchema>;
+export type UpdateMemberRoleInput = z.infer<typeof updateMemberRoleSchema>;
+export type TransferOwnershipInput = z.infer<typeof transferOwnershipSchema>;

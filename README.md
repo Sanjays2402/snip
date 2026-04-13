@@ -1,149 +1,213 @@
-# Snip — URL Shortener API
+# Snip — Production-Grade URL Shortener
 
-Production-grade URL shortener built with Node.js, Express, TypeScript, PostgreSQL, Redis, and ClickHouse.
+A full-featured URL shortener API built with TypeScript, Express, PostgreSQL, Redis, and ClickHouse.
 
 ## Features
 
-### Phase 1 — Core
-- **Auth:** JWT + refresh tokens, API key authentication
-- **Links:** Create, read, update, delete, bulk create with custom slugs
-- **Redirect Engine:** Redis-cached, bot detection, password-protected links, expiration, max clicks
-- **Click Tracking:** Device, browser, OS, referrer detection
-- **Workspaces:** Multi-tenant workspace support
-
-### Phase 2 — Analytics & Infrastructure
-- **ClickHouse Analytics:** Real-time click analytics with time-series data, geo breakdowns, device/browser/OS/referrer stats
-- **BullMQ Background Jobs:** Geo-lookup, webhook delivery, analytics rollup, link cleanup workers
-- **Webhook System:** Subscribe to events (link.clicked, link.created, link.threshold_reached, link.expired) with HMAC-SHA256 signatures
-- **Rate Limiting:** Token bucket algorithm per-tier (unauthenticated: 20/min, JWT: 100/min, API key: 200/min)
-- **GeoIP Resolution:** Country/city detection from IP addresses via geoip-lite
+- **🔗 Link Management** — Create, update, delete short links with custom slugs, tags, expiration, and password protection
+- **📊 Analytics** — Real-time and historical click analytics powered by ClickHouse
+- **🔒 Authentication** — JWT-based auth with refresh tokens + API key support
+- **🏢 Workspaces** — Team collaboration with RBAC (admin/editor/viewer roles)
+- **📱 QR Codes** — Generate branded QR codes with custom colors and logo overlays
+- **🔔 Webhooks** — HMAC-SHA256 signed webhook delivery for link events
+- **⚡ Performance** — Redis caching, token bucket rate limiting, background job processing
+- **📥 Bulk Operations** — CSV import/export for managing links at scale
+- **📖 API Docs** — Interactive Swagger UI at `/docs`
+- **🖥️ CLI Tool** — Full-featured command-line interface
 
 ## Quick Start
 
+### Prerequisites
+
+- Node.js 20+
+- PostgreSQL 15+
+- Redis 7+
+- ClickHouse (optional, for analytics)
+
+### Docker Compose
+
 ```bash
-# Clone and start everything (includes PostgreSQL, Redis, ClickHouse)
-docker-compose up -d
+# Start all services
+docker compose up -d
 
-# Generate and run migrations
+# Run the API
+cp .env.example .env
 npm install
-npm run db:generate
 npm run db:push
-
-# Seed test data
-npm run seed
-
-# Development
 npm run dev
 ```
 
-## API Endpoints
+### Docker Compose Services
 
-### Auth
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/auth/register` | Register new user |
-| POST | `/api/auth/login` | Login (returns JWT + refresh token) |
-| POST | `/api/auth/refresh` | Refresh access token |
-| POST | `/api/auth/logout` | Invalidate refresh token |
+```yaml
+# docker-compose.yml
+version: '3.8'
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: snip
+      POSTGRES_PASSWORD: snip_secret
+      POSTGRES_DB: snip
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
 
-### Links (requires auth)
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/links` | Create short link |
-| POST | `/api/links/bulk` | Bulk create links |
-| GET | `/api/links` | List links (paginated) |
-| GET | `/api/links/:id` | Get link details + stats |
-| PATCH | `/api/links/:id` | Update link |
-| DELETE | `/api/links/:id` | Soft delete link |
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
 
-### Analytics (requires auth)
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/links/:id/analytics` | Detailed click analytics (time-series, geo, devices) |
-| GET | `/api/links/:id/analytics/realtime` | Last 60 minutes click stream |
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    ports:
+      - '8123:8123'
+    volumes:
+      - chdata:/var/lib/clickhouse
 
-Query params for `/analytics`: `from`, `to` (ISO dates), `granularity` (hour/day/week/month)
-
-### Webhooks (requires auth)
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/webhooks` | Create webhook subscription |
-| GET | `/api/webhooks` | List user's webhooks |
-| DELETE | `/api/webhooks/:id` | Delete webhook |
-| GET | `/api/webhooks/:id/deliveries` | View delivery logs |
-
-Webhook events: `link.clicked`, `link.created`, `link.threshold_reached`, `link.expired`
-
-Payloads are signed with HMAC-SHA256 in the `X-Snip-Signature` header.
-
-### API Keys (requires auth)
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/keys` | Create API key |
-| GET | `/api/keys` | List API keys |
-| DELETE | `/api/keys/:id` | Delete API key |
-
-### Redirect
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/:shortCode` | Redirect to original URL |
-| POST | `/:shortCode/verify` | Verify password for protected links |
-
-### Health
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Health check (DB + Redis + ClickHouse) |
-| GET | `/api/stats` | Server stats (includes ClickHouse totals) |
-
-## Rate Limiting
-
-All endpoints are rate limited using a Redis-backed token bucket:
-
-| Tier | Limit | Identifier |
-|------|-------|------------|
-| Unauthenticated | 20 req/min | IP address |
-| JWT authenticated | 100 req/min | User ID |
-| API key | 200 req/min | User ID |
-
-Headers returned: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`
-
-## Background Workers
-
-Workers start automatically with the app:
-
-- **Geo-lookup** — Resolves IP addresses to country/city, writes to ClickHouse
-- **Webhook delivery** — Delivers webhooks with HMAC signature, exponential backoff (3 attempts)
-- **Analytics rollup** — Aggregates hourly/daily click stats in ClickHouse
-- **Link cleanup** — Deactivates expired links and links past max clicks (every 15 min)
+volumes:
+  pgdata:
+  chdata:
+```
 
 ## Environment Variables
 
-See `.env.example` for all configuration options.
+| Variable | Default | Description |
+|---|---|---|
+| `NODE_ENV` | `development` | Environment (development/production) |
+| `PORT` | `3000` | Server port |
+| `DATABASE_URL` | `postgresql://snip:snip_secret@localhost:5432/snip` | PostgreSQL connection string |
+| `REDIS_URL` | `redis://localhost:6379` | Redis connection string |
+| `CLICKHOUSE_URL` | `http://localhost:8123` | ClickHouse HTTP URL |
+| `JWT_SECRET` | — | JWT signing secret (required in production) |
+| `JWT_REFRESH_SECRET` | — | Refresh token secret (required in production) |
+| `JWT_EXPIRES_IN` | `15m` | Access token TTL |
+| `JWT_REFRESH_EXPIRES_IN` | `7d` | Refresh token TTL |
+| `BASE_URL` | `http://localhost:3000` | Public base URL for short links |
+| `SHORT_CODE_LENGTH` | `7` | Default short code length |
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql://snip:snip_secret@localhost:5432/snip` |
-| `REDIS_URL` | Redis connection string | `redis://localhost:6379` |
-| `CLICKHOUSE_URL` | ClickHouse HTTP interface URL | `http://localhost:8123` |
-| `JWT_SECRET` | JWT signing secret | — |
-| `JWT_REFRESH_SECRET` | Refresh token signing secret | — |
-| `BASE_URL` | Public base URL for short links | `http://localhost:3000` |
-| `SHORT_CODE_LENGTH` | Default short code length | `7` |
+## API Documentation
 
-## Test Credentials
+Interactive API docs are available at **`/docs`** when the server is running.
 
-After running `npm run seed`:
-- **Email:** test@snip.dev
-- **Password:** password123
+Raw OpenAPI JSON: **`GET /docs/json`**
+
+### Key Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/auth/register` | Register |
+| POST | `/api/auth/login` | Login |
+| POST | `/api/auth/refresh` | Refresh token |
+| POST | `/api/links` | Create short link |
+| GET | `/api/links` | List links |
+| GET | `/api/links/:id` | Get link details |
+| PATCH | `/api/links/:id` | Update link |
+| DELETE | `/api/links/:id` | Delete link |
+| GET | `/api/links/:id/qr` | Generate QR code |
+| GET | `/api/links/:id/analytics` | Link analytics |
+| POST | `/api/links/import` | CSV import |
+| GET | `/api/links/export` | CSV export |
+| POST | `/api/workspaces` | Create workspace |
+| GET | `/api/workspaces` | List workspaces |
+| POST | `/api/workspaces/:id/members` | Invite member |
+| POST | `/api/keys` | Create API key |
+| POST | `/api/webhooks` | Create webhook |
+| GET | `/:shortCode` | Redirect |
+
+## CLI Tool
+
+```bash
+# Install globally
+npm link
+
+# Configure
+snip config --api-url http://localhost:3000 --api-key snip_your_api_key
+
+# Create a link
+snip create https://example.com --slug my-link --tags marketing,social
+
+# List links
+snip list --limit 10 --tag marketing
+
+# View stats
+snip stats my-link
+
+# Delete a link
+snip delete my-link
+
+# Bulk import from CSV
+snip bulk links.csv
+```
+
+### CSV Format
+
+```csv
+original_url,custom_slug,tags,expires_at
+https://example.com,example,marketing;social,2025-12-31T23:59:59.000Z
+https://google.com,,,
+```
+
+## Architecture
+
+```
+┌─────────────┐     ┌──────────────┐     ┌───────────────┐
+│   Clients   │────▶│  Express API │────▶│  PostgreSQL   │
+│ (Web/CLI)   │     │  + Swagger   │     │  (Drizzle)    │
+└─────────────┘     └──────┬───────┘     └───────────────┘
+                           │
+                    ┌──────┴───────┐
+                    │              │
+               ┌────▼────┐  ┌─────▼──────┐
+               │  Redis  │  │ ClickHouse │
+               │ (Cache) │  │(Analytics) │
+               └────┬────┘  └────────────┘
+                    │
+              ┌─────▼──────┐
+              │  BullMQ    │
+              │  Workers   │
+              │ - geo      │
+              │ - webhooks │
+              │ - rollup   │
+              │ - cleanup  │
+              └────────────┘
+```
 
 ## Tech Stack
 
-- **Runtime:** Node.js 22 + TypeScript 5
-- **Framework:** Express 4
-- **Database:** PostgreSQL 16 (Drizzle ORM)
-- **Analytics:** ClickHouse (time-series click data)
-- **Cache & Queue:** Redis 7 (ioredis + BullMQ)
-- **Auth:** JWT + bcrypt
+- **Runtime:** Node.js + TypeScript
+- **Framework:** Express.js
+- **Database:** PostgreSQL (Drizzle ORM)
+- **Cache:** Redis (ioredis)
+- **Analytics:** ClickHouse
+- **Queue:** BullMQ
+- **Auth:** JWT + API Keys
 - **Validation:** Zod
-- **GeoIP:** geoip-lite
-- **Containerization:** Docker + Docker Compose
+- **QR Codes:** qrcode + sharp
+- **Docs:** swagger-jsdoc + swagger-ui-express
+- **CLI:** Commander + Chalk + cli-table3
+
+## Development
+
+```bash
+# Install dependencies
+npm install
+
+# Push schema to database
+npm run db:push
+
+# Start development server
+npm run dev
+
+# Type check
+npm run typecheck
+
+# Build for production
+npm run build
+npm start
+```
+
+## License
+
+MIT — see [LICENSE](LICENSE) for details.

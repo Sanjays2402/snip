@@ -9,6 +9,37 @@ const router = Router();
 
 const startTime = Date.now();
 
+/**
+ * @openapi
+ * /health:
+ *   get:
+ *     tags: [Health]
+ *     summary: Health check
+ *     responses:
+ *       200:
+ *         description: All services healthy
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   enum: [healthy, degraded]
+ *                 uptime:
+ *                   type: integer
+ *                 checks:
+ *                   type: object
+ *                   properties:
+ *                     database:
+ *                       type: string
+ *                     redis:
+ *                       type: string
+ *                     clickhouse:
+ *                       type: string
+ *       503:
+ *         description: One or more services unhealthy
+ */
 router.get('/health', async (_req: Request, res: Response) => {
   const checks: Record<string, string> = {};
 
@@ -43,6 +74,29 @@ router.get('/health', async (_req: Request, res: Response) => {
   });
 });
 
+/**
+ * @openapi
+ * /api/stats:
+ *   get:
+ *     tags: [Health]
+ *     summary: Get system stats
+ *     responses:
+ *       200:
+ *         description: System statistics
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 totalLinks:
+ *                   type: integer
+ *                 totalClicks:
+ *                   type: integer
+ *                 totalClicksClickHouse:
+ *                   type: integer
+ *                 uptime:
+ *                   type: integer
+ */
 router.get('/api/stats', async (_req: Request, res: Response) => {
   try {
     const [linkCount] = await db
