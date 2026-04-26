@@ -4,16 +4,16 @@ A full-featured URL shortener API built with TypeScript, Express, PostgreSQL, Re
 
 ## Features
 
-- **🔗 Link Management** — Create, update, delete short links with custom slugs, tags, expiration, and password protection
-- **📊 Analytics** — Real-time and historical click analytics powered by ClickHouse
-- **🔒 Authentication** — JWT-based auth with refresh tokens + API key support
-- **🏢 Workspaces** — Team collaboration with RBAC (admin/editor/viewer roles)
-- **📱 QR Codes** — Generate branded QR codes with custom colors and logo overlays
-- **🔔 Webhooks** — HMAC-SHA256 signed webhook delivery for link events
-- **⚡ Performance** — Redis caching, token bucket rate limiting, background job processing
-- **📥 Bulk Operations** — CSV import/export for managing links at scale
-- **📖 API Docs** — Interactive Swagger UI at `/docs`
-- **🖥️ CLI Tool** — Full-featured command-line interface
+- **Link Management** — Create, update, delete short links with custom slugs, tags, expiration, and password protection
+- **Analytics** — Real-time and historical click analytics powered by ClickHouse
+- **Authentication** — JWT-based auth with refresh tokens + API key support
+- **Workspaces** — Team collaboration with RBAC (admin/editor/viewer roles)
+- **QR Codes** — Generate branded QR codes with custom colors and logo overlays
+- **Webhooks** — HMAC-SHA256 signed webhook delivery for link events
+- **Performance** — Redis caching, token bucket rate limiting, background job processing
+- **Bulk Operations** — CSV import/export for managing links at scale
+- **API Docs** — Interactive Swagger UI at `/docs`
+- **CLI Tool** — Full-featured command-line interface
 
 ## Quick Start
 
@@ -43,32 +43,32 @@ npm run dev
 # docker-compose.yml
 version: '3.8'
 services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: snip
-      POSTGRES_PASSWORD: snip_secret
-      POSTGRES_DB: snip
-    ports:
-      - '5432:5432'
-    volumes:
-      - pgdata:/var/lib/postgresql/data
+ postgres:
+ image: postgres:16-alpine
+ environment:
+ POSTGRES_USER: snip
+ POSTGRES_PASSWORD: snip_secret
+ POSTGRES_DB: snip
+ ports:
+ - '5432:5432'
+ volumes:
+ - pgdata:/var/lib/postgresql/data
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - '6379:6379'
+ redis:
+ image: redis:7-alpine
+ ports:
+ - '6379:6379'
 
-  clickhouse:
-    image: clickhouse/clickhouse-server:latest
-    ports:
-      - '8123:8123'
-    volumes:
-      - chdata:/var/lib/clickhouse
+ clickhouse:
+ image: clickhouse/clickhouse-server:latest
+ ports:
+ - '8123:8123'
+ volumes:
+ - chdata:/var/lib/clickhouse
 
 volumes:
-  pgdata:
-  chdata:
+ pgdata:
+ chdata:
 ```
 
 ## Environment Variables
@@ -152,26 +152,26 @@ https://google.com,,,
 ## Architecture
 
 ```
-┌─────────────┐     ┌──────────────┐     ┌───────────────┐
-│   Clients   │────▶│  Express API │────▶│  PostgreSQL   │
-│ (Web/CLI)   │     │  + Swagger   │     │  (Drizzle)    │
-└─────────────┘     └──────┬───────┘     └───────────────┘
-                           │
-                    ┌──────┴───────┐
-                    │              │
-               ┌────▼────┐  ┌─────▼──────┐
-               │  Redis  │  │ ClickHouse │
-               │ (Cache) │  │(Analytics) │
-               └────┬────┘  └────────────┘
-                    │
-              ┌─────▼──────┐
-              │  BullMQ    │
-              │  Workers   │
-              │ - geo      │
-              │ - webhooks │
-              │ - rollup   │
-              │ - cleanup  │
-              └────────────┘
+┌─────────────┐ ┌──────────────┐ ┌───────────────┐
+│ Clients │────▶│ Express API │────▶│ PostgreSQL │
+│ (Web/CLI) │ │ + Swagger │ │ (Drizzle) │
+└─────────────┘ └──────┬───────┘ └───────────────┘
+ │
+ ┌──────┴───────┐
+ │ │
+ ┌────▼────┐ ┌─────▼──────┐
+ │ Redis │ │ ClickHouse │
+ │ (Cache) │ │(Analytics) │
+ └────┬────┘ └────────────┘
+ │
+ ┌─────▼──────┐
+ │ BullMQ │
+ │ Workers │
+ │ - geo │
+ │ - webhooks │
+ │ - rollup │
+ │ - cleanup │
+ └────────────┘
 ```
 
 ## Tech Stack
